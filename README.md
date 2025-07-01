@@ -37,6 +37,10 @@ The only original thing being done is the editing and gathering of all materials
 
 ## Installation 👩‍💻
 
+If you are brand new to using the command line, check out our
+[Beginner Friendly Installation Guide](NOOB_INSTALL_GUIDE.md) for a detailed
+walk‑through.
+
 1. Clone this repository
 2. Run `pip install -r requirements.txt`
 3. Run `python -m playwright install` and `python -m playwright install-deps`
