@@ -217,7 +217,7 @@ def make_final_video(
 
     # Gather all audio clips
     audio_clips = list()
-    if number_of_clips == 0 and settings.config["settings"]["storymode"] == "false":
+    if number_of_clips == 0 and not settings.config["settings"]["storymode"]:
         print(
             "No audio clips to gather. Please use a different TTS or post."
         )  # This is to fix the TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'
