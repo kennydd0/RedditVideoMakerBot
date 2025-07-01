@@ -6,6 +6,7 @@ from pathlib import Path
 from subprocess import Popen
 from typing import NoReturn
 
+import argparse
 from prawcore import ResponseException
 
 from reddit.subreddit import get_subreddit_threads
@@ -23,7 +24,7 @@ from video_creation.background import (
 )
 from video_creation.final_video import make_final_video
 from video_creation.screenshot_downloader import get_screenshots_of_reddit_posts
-from video_creation.voices import save_text_to_mp3
+from video_creation.voices import save_text_to_mp3, TTSProviders
 
 __VERSION__ = "3.3.0"
 
@@ -79,6 +80,20 @@ def shutdown() -> NoReturn:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Reddit Video Maker Bot")
+    parser.add_argument(
+        "--list-tts",
+        action="store_true",
+        help="List available TTS providers and exit",
+    )
+    args = parser.parse_args()
+
+    if args.list_tts:
+        print_step("Available TTS Providers:")
+        for provider in TTSProviders:
+            print_substep(f"- {provider}")
+        sys.exit()
+
     if sys.version_info.major != 3 or sys.version_info.minor not in [10, 11]:
         print(
             "Hey! Congratulations, you've made it so far (which is pretty rare with no Python 3.10). Unfortunately, this program only works on Python 3.10. Please install Python 3.10 and try again."
