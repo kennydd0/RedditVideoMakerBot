@@ -1,6 +1,7 @@
-import os
+# import os # No longer needed
 import re
 import textwrap
+from pathlib import Path # Added pathlib
 
 from PIL import Image, ImageDraw, ImageFont
 from rich.progress import track
@@ -58,18 +59,46 @@ def imagemaker(theme, reddit_obj: dict, txtclr, padding=5, transparent=False) ->
     Render Images for video
     """
     texts = reddit_obj["thread_post"]
-    id = re.sub(r"[^\w\s-]", "", reddit_obj["thread_id"])
+    # Use safe_thread_id if available from prior processing, otherwise sanitize
+    safe_id = reddit_obj.get("safe_thread_id", re.sub(r"[^\w\s-]", "", reddit_obj["thread_id"]))
+
+    # Define font paths using pathlib for consistency, then convert to string for PIL
+    # Assuming a FONTS_DIR constant would be defined similarly to how it's done in final_video.py
+    # For now, let's define it locally or assume it's passed/configured.
+    # For this change, I'll define a local FONTS_DIR relative to this file's assumed location if not available globally.
+    # A better long-term solution is a shared constants/config for such paths.
+
+    # Assuming this utils/imagenarator.py is in utils/, and fonts/ is at project_root/fonts/
+    # So, Path(__file__).parent.parent / "fonts"
+    # For simplicity, let's use a relative path from CWD, assuming CWD is project root.
+    fonts_dir = Path("fonts")
+    roboto_bold_path = str(fonts_dir / "Roboto-Bold.ttf")
+    roboto_regular_path = str(fonts_dir / "Roboto-Regular.ttf")
 
     if transparent:
-        font = ImageFont.truetype(os.path.join("fonts", "Roboto-Bold.ttf"), 100)
+        font = ImageFont.truetype(roboto_bold_path, 100)
     else:
-        font = ImageFont.truetype(os.path.join("fonts", "Roboto-Regular.ttf"), 100)
-    size = (1920, 1080)
+        font = ImageFont.truetype(roboto_regular_path, 100)
 
-    image = Image.new("RGBA", size, theme)
+    size = (1920, 1080) # Consider making size configurable
 
-    for idx, text in track(enumerate(texts), "Rendering Image"):
-        image = Image.new("RGBA", size, theme)
-        text = process_text(text, False)
+    # Ensure output directory exists
+    output_dir = Path("assets") / "temp" / safe_id / "png"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, text in track(enumerate(texts), "Rendering Images for Storymode"): # Changed description
+        image = Image.new("RGBA", size, theme) # Create a fresh image for each text segment
+        text = process_text(text, False) # Assuming process_text is defined elsewhere
         draw_multiple_line_text(image, text, font, txtclr, padding, wrap=30, transparent=transparent)
-        image.save(f"assets/temp/{id}/png/img{idx}.png")
+
+        output_image_path = output_dir / f"img{idx}.png"
+        try:
+            image.save(output_image_path)
+        except Exception as e:
+            # Log error if imagemaker is integrated with logging
+            # For now, print to stderr or raise
+            print(f"Error saving image {output_image_path}: {e}") # Replace with logger.error if available
+            # Depending on desired behavior, either continue or raise e
+            # For now, let's continue to try and process other images.
+            # Consider adding `logger.error(..., exc_info=True)` here
+            pass

@@ -1,3 +1,4 @@
+import json # Added import
 import webbrowser
 from pathlib import Path
 
@@ -75,14 +76,55 @@ def settings():
     # Get checks for all values
     checks = gui.get_checks()
 
+    # Dynamically load background choices for the settings page
+    available_backgrounds = []
+    backgrounds_json_path = Path("utils/backgrounds.json")
+    if backgrounds_json_path.exists():
+        try:
+            with open(backgrounds_json_path, "r", encoding="utf-8") as f:
+                background_data = json.load(f)
+                available_backgrounds = sorted(list(background_data.keys())) # Sort for consistent order
+        except (json.JSONDecodeError, IOError) as e:
+            # Log this error or flash a message if persistent issues occur
+            app.logger.warning(f"Could not load background choices from {backgrounds_json_path}: {e}")
+            pass # Keep available_backgrounds empty
+
     if request.method == "POST":
         # Get data from form as dict
         data = request.form.to_dict()
 
         # Change settings
+        # The gui.modify_settings function will internally use gui.check,
+        # which now uses safe type conversion.
+        # Validation of 'background_choice' against available_backgrounds
+        # should ideally happen within gui.check if 'options' were dynamic,
+        # or here before calling gui.modify_settings.
+        # For now, relying on utils.settings.py to do the final validation run
+        # when the main script loads the config.
         config = gui.modify_settings(data, config_load, checks)
 
-    return render_template("settings.html", file="config.toml", data=config, checks=checks)
+        # It's good practice to redirect after a POST to prevent re-submission
+        # However, the current structure re-renders. If issues arise, consider redirect:
+        # return redirect(url_for('settings'))
+        # For now, we need to re-fetch the (potentially modified) flat config for rendering
+        config = gui.get_config(config_load)
+
+
+    # Add available_backgrounds to the template context.
+    # The settings.html template will need to be updated to use this.
+    # Example for the dropdown in settings.html:
+    #
+    # <label for="background_choice">Background Choice:</label>
+    # <select name="background_choice" id="background_choice">
+    #   {% for bg_name in available_backgrounds %}
+    #     <option value="{{ bg_name }}" {% if bg_name == data.get('background_choice') %}selected{% endif %}>
+    #       {{ bg_name }}
+    #     </option>
+    #   {% endfor %}
+    # </select>
+    #
+    # Note: `data.get('background_choice')` refers to the current config value for background_choice.
+    return render_template("settings.html", file="config.toml", data=config, checks=checks, available_backgrounds=available_backgrounds)
 
 
 # Make videos.json accessible

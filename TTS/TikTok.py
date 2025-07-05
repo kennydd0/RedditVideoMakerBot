@@ -1,5 +1,6 @@
 # documentation for tiktok api: https://github.com/oscie57/tiktok-voice/wiki
 import base64
+import logging # Added for logging
 import random
 import time
 from typing import Final, Optional
@@ -75,11 +76,14 @@ vocals: Final[tuple] = (
     "en_female_ht_f08_wonderful_world",  # Dramatic
 )
 
+logger = logging.getLogger(__name__)
+
 
 class TikTok:
     """TikTok Text-to-Speech Wrapper"""
 
     def __init__(self):
+        logger.debug("Initializing TikTok TTS session.")
         headers = {
             "User-Agent": "com.zhiliaoapp.musically/2022600030 (Linux; U; Android 7.1.2; es_ES; SM-G988N; "
             "Build/NRD90M;tt-ok/3.12.13.1)",
@@ -94,53 +98,87 @@ class TikTok:
         self._session.headers = headers
 
     def run(self, text: str, filepath: str, random_voice: bool = False):
+        logger.info(f"Requesting TikTok TTS for text: '{text[:30]}...' Output: {filepath}")
         if random_voice:
             voice = self.random_voice()
+            logger.debug(f"Using random TikTok voice: {voice}")
         else:
-            # if tiktok_voice is not set in the config file, then use a random voice
             voice = settings.config["settings"]["tts"].get("tiktok_voice", None)
+            if voice:
+                logger.debug(f"Using configured TikTok voice: {voice}")
+            else:
+                logger.debug("No specific TikTok voice configured, API will choose.")
 
-        # get the audio from the TikTok API
         data = self.get_voices(voice=voice, text=text)
 
-        # check if there was an error in the request
-        status_code = data["status_code"]
+        status_code = data.get("status_code") # Use .get for safer access
         if status_code != 0:
-            raise TikTokTTSException(status_code, data["message"])
+            message = data.get("message", "Unknown error from TikTok API")
+            logger.error(f"TikTok TTS API error. Status: {status_code}, Message: {message}")
+            raise TikTokTTSException(status_code, message)
 
-        # decode data from base64 to binary
         try:
             raw_voices = data["data"]["v_str"]
-        except:
-            print(
-                "The TikTok TTS returned an invalid response. Please try again later, and report this bug."
-            )
-            raise TikTokTTSException(0, "Invalid response")
+        except KeyError: # More specific exception
+            logger.error("TikTok TTS returned an invalid response: 'data' or 'v_str' key missing. Full response: %s", data)
+            raise TikTokTTSException(0, "Invalid response structure from TikTok API")
+
+        logger.debug("Decoding base64 audio data.")
         decoded_voices = base64.b64decode(raw_voices)
 
-        # write voices to specified filepath
-        with open(filepath, "wb") as out:
-            out.write(decoded_voices)
+        try:
+            with open(filepath, "wb") as out:
+                out.write(decoded_voices)
+            logger.info(f"Successfully saved TikTok TTS audio to {filepath}")
+        except IOError as e:
+            logger.error(f"Failed to write TikTok TTS audio to {filepath}: {e}", exc_info=True)
+            raise # Re-raise the IOError
 
     def get_voices(self, text: str, voice: Optional[str] = None) -> dict:
         """If voice is not passed, the API will try to use the most fitting voice"""
         # sanitize text
-        text = text.replace("+", "plus").replace("&", "and").replace("r/", "")
+        sanitized_text = text.replace("+", "plus").replace("&", "and").replace("r/", "")
+        logger.debug(f"Sanitized text for TikTok API: '{sanitized_text[:50]}...'")
 
-        # prepare url request
-        params = {"req_text": text, "speaker_map_type": 0, "aid": 1233}
+        params = {"req_text": sanitized_text, "speaker_map_type": 0, "aid": 1233}
 
         if voice is not None:
             params["text_speaker"] = voice
 
-        # send request
+        logger.debug(f"Sending POST request to TikTok TTS API: {self.URI_BASE} with params: {params}")
         try:
-            response = self._session.post(self.URI_BASE, params=params)
-        except ConnectionError:
-            time.sleep(random.randrange(1, 7))
-            response = self._session.post(self.URI_BASE, params=params)
+            response = self._session.post(self.URI_BASE, params=params, timeout=10) # Added timeout
+            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"Connection error during TikTok TTS request: {e}. Retrying after delay...")
+            time.sleep(random.uniform(1, 5)) # Use uniform for float sleep times
+            try:
+                response = self._session.post(self.URI_BASE, params=params, timeout=15) # Longer timeout for retry
+                response.raise_for_status()
+            except requests.exceptions.RequestException as retry_e: # Catch any request exception on retry
+                logger.error(f"TikTok TTS request failed after retry: {retry_e}", exc_info=True)
+                # Return a dict that mimics an error response from the API
+                return {"status_code": -1, "message": f"Request failed after retry: {retry_e}"}
+        except requests.exceptions.HTTPError as e: # Handle HTTP errors (4xx, 5xx)
+            logger.error(f"TikTok TTS API returned HTTP error: {e.response.status_code} {e.response.reason}. Response: {e.response.text[:200]}")
+            # Try to parse JSON even on HTTP error, as API might still return JSON error message
+            try:
+                return e.response.json()
+            except ValueError: # If response is not JSON
+                 return {"status_code": e.response.status_code, "message": e.response.reason}
+        except requests.exceptions.Timeout as e:
+            logger.error(f"TikTok TTS request timed out: {e}")
+            return {"status_code": -2, "message": f"Request timed out: {e}"}
+        except requests.exceptions.RequestException as e: # Catch other request-related errors
+            logger.error(f"TikTok TTS request failed: {e}", exc_info=True)
+            return {"status_code": -3, "message": f"Request failed: {e}"}
 
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as e: # If response is not JSON
+            logger.error(f"TikTok TTS API did not return valid JSON. Status: {response.status_code}, Response: {response.text[:200]}. Error: {e}")
+            return {"status_code": -4, "message": "Invalid JSON response from API"}
+
 
     @staticmethod
     def random_voice() -> str:
