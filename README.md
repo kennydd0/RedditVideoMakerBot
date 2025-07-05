@@ -53,7 +53,8 @@ On macOS and Linux (debian, arch, fedora and centos, and based on those), you ca
 
 This can also be used to update the installation
 
-4. Run `python main.py`
+4. Run `python main.py` (use `python main.py --gemini` to offload AI tasks to Google Gemini)
+   You can also set `provider = "gemini"` under the `[ai]` section in `config.toml` to make this permanent.
 5. Visit [the Reddit Apps page.](https://www.reddit.com/prefs/apps), and set up an app that is a "script". Paste any URL in redirect URL. Ex:`https://jasoncameron.dev`
 6. The bot will ask you to fill in your details to connect to the Reddit API, and configure the bot to your liking
 7. Enjoy 😎

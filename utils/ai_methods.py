@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from transformers import AutoModel, AutoTokenizer
+from utils import settings
+import google.generativeai as genai
 
 
 # Mean Pooling - Take attention mask into account for correct averaging
@@ -14,9 +16,14 @@ def mean_pooling(model_output, attention_mask):
 
 # This function sort the given threads based on their total similarity with the given keywords
 def sort_by_similarity(thread_objects, keywords):
-    # Initialize tokenizer + model.
-    tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-    model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+    global_provider = settings.config["ai"].get("provider", "local")
+    provider = settings.config["ai"].get("ai_similarity_provider", global_provider)
+    if provider == "gemini":
+        genai.configure(api_key=settings.config["ai"].get("gemini_api_key"))
+        model_name = settings.config["ai"].get("gemini_embedding_model", "models/embedding-001")
+    else:
+        tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+        model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 
     # Transform the generator to a list of Submission Objects, so we can sort later based on context similarity to
     # keywords
@@ -27,18 +34,34 @@ def sort_by_similarity(thread_objects, keywords):
         threads_sentences.append(" ".join([thread.title, thread.selftext]))
 
     # Threads inference
-    encoded_threads = tokenizer(
-        threads_sentences, padding=True, truncation=True, return_tensors="pt"
-    )
-    with torch.no_grad():
-        threads_embeddings = model(**encoded_threads)
-    threads_embeddings = mean_pooling(threads_embeddings, encoded_threads["attention_mask"])
+    if provider == "gemini":
+        threads_embeddings = [
+            genai.embed_content(model=model_name, content=text)["embedding"]
+            for text in threads_sentences
+        ]
+        keywords_embeddings = [
+            genai.embed_content(model=model_name, content=text)["embedding"]
+            for text in keywords
+        ]
+    else:
+        encoded_threads = tokenizer(
+            threads_sentences, padding=True, truncation=True, return_tensors="pt"
+        )
+        with torch.no_grad():
+            threads_embeddings = model(**encoded_threads)
+        threads_embeddings = mean_pooling(
+            threads_embeddings, encoded_threads["attention_mask"]
+        )
 
-    # Keywords inference
-    encoded_keywords = tokenizer(keywords, padding=True, truncation=True, return_tensors="pt")
-    with torch.no_grad():
-        keywords_embeddings = model(**encoded_keywords)
-    keywords_embeddings = mean_pooling(keywords_embeddings, encoded_keywords["attention_mask"])
+        # Keywords inference
+        encoded_keywords = tokenizer(
+            keywords, padding=True, truncation=True, return_tensors="pt"
+        )
+        with torch.no_grad():
+            keywords_embeddings = model(**encoded_keywords)
+        keywords_embeddings = mean_pooling(
+            keywords_embeddings, encoded_keywords["attention_mask"]
+        )
 
     # Compare every keyword w/ every thread embedding
     threads_embeddings_tensor = torch.tensor(threads_embeddings)
