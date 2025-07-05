@@ -86,6 +86,11 @@ if __name__ == "__main__":
         action="store_true",
         help="List available TTS providers and exit",
     )
+    parser.add_argument(
+        "--gemini",
+        action="store_true",
+        help="Use Google Gemini for all AI features",
+    )
     args = parser.parse_args()
 
     if args.list_tts:
@@ -104,6 +109,8 @@ if __name__ == "__main__":
     config = settings.check_toml(
         f"{directory}/utils/.config.template.toml", f"{directory}/config.toml"
     )
+    if args.gemini:
+        settings.config["ai"]["provider"] = "gemini"
     config is False and sys.exit()
 
     if (

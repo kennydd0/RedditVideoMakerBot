@@ -9,6 +9,7 @@ from TTS.GTTS import GTTS
 from TTS.pyttsx import pyttsx
 from TTS.streamlabs_polly import StreamlabsPolly
 from TTS.TikTok import TikTok
+from TTS.gemini import gemini
 from utils import settings
 from utils.console import print_step, print_table
 
@@ -21,6 +22,7 @@ TTSProviders = {
     "TikTok": TikTok,
     "pyttsx": pyttsx,
     "ElevenLabs": elevenlabs,
+    "Gemini": gemini,
 }
 
 
@@ -35,6 +37,8 @@ def save_text_to_mp3(reddit_obj) -> Tuple[int, int]:
     """
 
     voice = settings.config["settings"]["tts"]["voice_choice"]
+    if settings.config["ai"].get("provider", "local") == "gemini":
+        voice = "Gemini"
     if str(voice).casefold() in map(lambda _: _.casefold(), TTSProviders):
         text_to_mp3 = TTSEngine(get_case_insensitive_key_value(TTSProviders, voice), reddit_obj)
     else:
