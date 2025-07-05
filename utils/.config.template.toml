@@ -56,3 +56,8 @@ python_voice = { optional = false, default = "1", example = "1", explanation = "
 py_voice_num = { optional = false, default = "2", example = "2", explanation = "The number of system voices (2 are pre-installed in Windows)" }
 silence_duration = { optional = true, example = "0.1", explanation = "Time in seconds between TTS comments", default = 0.3, type = "float" }
 no_emojis = { optional = false, type = "bool", default = false, example = false, options = [true, false,], explanation = "Whether to remove emojis from the comments" }
+
+[gemini] # New section for Gemini AI settings
+api_key = { optional = true, default = "", type = "str", explanation = "Your Google Gemini API Key. Required if enable_summary is true.", example = "AIzaxxxxxxxxxxxxxxxxxxxxxxx" } # Ensure type is str
+enable_summary = { optional = true, type = "bool", default = false, example = false, options = [true, false,], explanation = "Enable summarizing Reddit thread selftext using Gemini AI." }
+# Future Gemini settings could go here, e.g., model_name, specific prompts, etc.

@@ -29,6 +29,7 @@ from utils.ffmpeg_install import ffmpeg_install
 # Assuming it was for generating a unique ID from the reddit object,
 # this functionality will be implicitly handled by using reddit_object["thread_id"]
 from utils.version import checkversion
+from utils.gemini_client import summarize_text_with_gemini # Added for summarization
 from video_creation.background import (
     chop_background,
     download_background_audio,
@@ -140,9 +141,45 @@ def get_reddit_data(post_id_override: str = None) -> Dict[str, Any]:
     return reddit_object
 
 def generate_audio_and_screenshots(reddit_object: Dict[str, Any]) -> Tuple[int, int]:
-    """Generates TTS audio for the reddit content and takes screenshots."""
-    logging.info("Generating audio and screenshots...")
-    length, number_of_comments = save_text_to_mp3(reddit_object)
+    """
+    Generates TTS audio for the Reddit content (potentially summarized) and takes screenshots.
+    """
+    logging.info("Preparing content for audio and screenshots...")
+
+    # --- Gemini Summarization Step ---
+    if settings.config.get("gemini", {}).get("enable_summary"):
+        logging.info("Gemini summarization enabled. Attempting to summarize thread content.")
+        # Construct text for summarization: title + selftext
+        # Ensure 'thread_title' and 'thread_selftext' exist. 'thread_selftext' might be empty for image/link posts.
+        title = reddit_object.get("thread_title", "")
+        selftext = reddit_object.get("thread_selftext", "") # This is what TTSEngine uses for the main post
+
+        if selftext and selftext.strip(): # Only summarize if there's actual selftext
+            text_to_summarize = f"Titel: {title}\n\nBericht:\n{selftext}"
+            logging.debug(f"Text to summarize (first 200 chars): {text_to_summarize[:200]}")
+
+            summary = summarize_text_with_gemini(text_to_summarize)
+            if summary:
+                logging.info("Successfully summarized thread content with Gemini.")
+                # Replace the original selftext with the summary for TTS
+                # The TTSEngine in voices.py specifically looks for 'thread_selftext' for the main post.
+                reddit_object["thread_selftext"] = summary
+                # The title is usually read out separately by TTSEngine.
+                # If the summary should also include/replace the title for TTS, this logic might need adjustment
+                # or the prompt to Gemini could be to make the summary inclusive of the title's context.
+                # Current prompt: "Vat de volgende Reddit-thread samen in een boeiend en beknopt verhaal..."
+                # This implies the summary might naturally incorporate the title's essence.
+                logging.debug(f"Using Gemini summary for TTS (first 100 chars): {summary[:100]}")
+            else:
+                logging.warning("Failed to get summary from Gemini, or summary was empty. Using original selftext.")
+        else:
+            logging.info("No selftext found or selftext is empty. Skipping Gemini summarization for this post.")
+    else:
+        logging.info("Gemini summarization is not enabled.")
+    # --- End Gemini Summarization ---
+
+    logging.info("Proceeding to generate TTS audio and screenshots with (potentially summarized) content...")
+    length, number_of_comments = save_text_to_mp3(reddit_object) # save_text_to_mp3 uses reddit_object["thread_selftext"]
     final_length = math.ceil(length)
     get_screenshots_of_reddit_posts(reddit_object, number_of_comments)
     logging.info("Audio and screenshots generated.")
@@ -237,6 +274,20 @@ if __name__ == "__main__":
     logging.debug("Logging initialized.")
 
     app_config = initialize_app_checks_and_config()
+
+    # Initialize Gemini client if enabled
+    if app_config.get("gemini", {}).get("enable_summary"):
+        try:
+            from utils.gemini_client import initialize_gemini
+            if not initialize_gemini():
+                logging.warning("Gemini client initialization failed or was skipped. Summarization will not be available.")
+            else:
+                logging.info("Gemini client initialized for summarization.")
+        except ImportError:
+            logging.error("Failed to import gemini_client. Summarization will not be available. Ensure google-generativeai is installed.")
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during Gemini initialization: {e}", exc_info=True)
+
 
     try:
         post_ids_str = app_config.get("reddit", {}).get("thread", {}).get("post_id")

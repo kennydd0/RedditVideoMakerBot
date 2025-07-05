@@ -260,9 +260,43 @@ Overwrite with a fresh configuration based on the template? (y/n)[/blue]""")
 If you see any prompts, that means that you have unset/incorrectly set variables, please input the correct values.\
 """
     )
-    crawl(template, check_vars)
-    with open(config_file, "w") as f:
+    crawl(template, check_vars) # Populates global `config` by validating against template
+
+    # --- Custom validation for Gemini settings ---
+    if "gemini" in config and isinstance(config["gemini"], dict):
+        gemini_settings = config["gemini"]
+        if gemini_settings.get("enable_summary") is True:
+            if not gemini_settings.get("api_key"):
+                logger.warning("Gemini summary is enabled, but API key is missing.")
+                # Prompt user for API key if missing and summary is enabled
+                # This uses the `handle_input` which is part of `utils.console`
+                # and uses Rich Console for prompting.
+                gemini_api_key_checks = template.get("gemini", {}).get("api_key", {})
+                # Ensure the 'type' is 'str' for handle_input if not otherwise specified for this direct call
+                gemini_api_key_checks.setdefault("type", "str")
+
+                # We need a local Rich Console instance if handle_input relies on a global one not set here.
+                # However, handle_input itself creates a Console instance.
+
+                api_key_value = handle_input(
+                    message="[#C0CAF5 bold]Gemini API Key ([red]required as summary is enabled[/#C0CAF5 bold]): ",
+                    extra_info=gemini_api_key_checks.get("explanation", "Enter your Google Gemini API Key."),
+                    check_type=_get_safe_type_converter(gemini_api_key_checks.get("type", "str")), # Pass callable
+                    optional=False, # It's not optional if enable_summary is true
+                    err_message="API Key cannot be empty when summary is enabled."
+                    # Potentially add nmin for basic validation if desired
+                )
+                config["gemini"]["api_key"] = api_key_value
+                if not api_key_value: # Double check if user somehow bypassed
+                    logger.error("Gemini API Key is required when enable_summary is true. Configuration incomplete.")
+                    return False # Indicate failure
+            else:
+                logger.debug("Gemini summary enabled and API key is present.")
+    # --- End custom validation ---
+
+    with open(config_file, "w", encoding="utf-8") as f: # Ensure encoding
         toml.dump(config, f)
+    logger.info(f"Configuration successfully checked and saved to {config_file}")
     return config
 
 
