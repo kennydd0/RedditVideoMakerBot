@@ -60,4 +60,5 @@ no_emojis = { optional = false, type = "bool", default = false, example = false,
 [gemini] # New section for Gemini AI settings
 api_key = { optional = true, default = "", type = "str", explanation = "Your Google Gemini API Key. Required if enable_summary is true.", example = "AIzaxxxxxxxxxxxxxxxxxxxxxxx" } # Ensure type is str
 enable_summary = { optional = true, type = "bool", default = false, example = false, options = [true, false,], explanation = "Enable summarizing Reddit thread selftext using Gemini AI." }
-# Future Gemini settings could go here, e.g., model_name, specific prompts, etc.
+model_name = { optional = true, type = "str", default = "gemini-1.5-pro-latest", example = "gemini-1.5-pro-latest", explanation = "The Gemini model to use for summarization (e.g., 'gemini-1.5-pro-latest', 'gemini-1.0-pro')."}
+# Future Gemini settings could go here, e.g., specific prompts, etc.
